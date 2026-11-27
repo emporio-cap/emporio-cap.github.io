@@ -144,6 +144,40 @@ padding:12px 16px;
   background:#d8b56c!important;
   color:#000!important;
 }
+#checkoutShade .cart-panel{
+  background:#000;
+  color:#fff;
+}
+
+#checkoutForm{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:20px;
+}
+
+#checkoutForm label{
+  color:#b89b69;
+  font-size:13px;
+}
+
+#checkoutForm input{
+  width:100%;
+  padding:13px;
+  background:#111;
+  color:white;
+  border:1px solid #b89b69;
+  border-radius:8px;
+  font-size:15px;
+}
+
+#checkoutForm input::placeholder{
+  color:#888;
+}
+
+#checkoutForm button{
+  margin-top:10px;
+}
 </style></head>
 <body>
 <div class="announce">Envío sin cargo en Salta Capital · Envíos a todo el país</div>
@@ -160,7 +194,42 @@ target="_blank">
 </svg>
 CONSULTAR POR WHATSAPP
  </a>
-<div class="cart-shade" id="cartShade" onclick="if(event.target===this)closeCart()"><aside class="cart-panel"><div class="cart-top"><h2>Tu carrito</h2><button class="cart-close" onclick="closeCart()" aria-label="Cerrar">×</button></div><div id="cartItems"></div><div class="cart-total"><span>Total</span><span id="cartTotal">$0</span></div><button class="checkout" onclick="sendOrder()">PAGAR CON MERCADO PAGO</button></aside></div>
+<div id="checkoutShade" class="cart-shade">
+  <aside class="cart-panel">
+    <div class="cart-top">
+      <h2>Datos de compra</h2>
+      <button class="cart-close" onclick="closeCheckout()">×</button>
+    </div>
+
+    <form id="checkoutForm" onsubmit="submitCheckout(event)">
+      <label>Nombre y apellido</label>
+      <input name="nombre" required autocomplete="name" placeholder="Tu nombre completo">
+
+      <label>WhatsApp</label>
+      <input name="telefono" required type="tel" autocomplete="tel" placeholder="Tu número de contacto">
+
+      <label>Email</label>
+      <input name="email" required type="email" autocomplete="email" placeholder="Tu correo">
+
+      <label>Dirección</label>
+      <input name="direccion" required autocomplete="street-address" placeholder="Calle y número, localidad">
+
+      <label>Código postal</label>
+      <input name="codigo_postal" required placeholder="Código postal">
+
+      <p style="font-size:12px;color:#b89b69">
+        En Salta Capital (CP 4400), el envío es gratis.
+        En el resto del país, el envío corre por cuenta del comprador
+        y se coordina posteriormente.
+      </p>
+
+      <button type="submit" class="checkout">
+        CONTINUAR A MERCADO PAGO
+      </button>
+    </form>
+  </aside>
+</div> 
+ <div class="cart-shade" id="cartShade" onclick="if(event.target===this)closeCart()"><aside class="cart-panel"><div class="cart-top"><h2>Tu carrito</h2><button class="cart-close" onclick="closeCart()" aria-label="Cerrar">×</button></div><div id="cartItems"></div><div class="cart-total"><span>Total</span><span id="cartTotal">$0</span></div><button class="checkout" onclick="sendOrder()">PAGAR CON MERCADO PAGO</button></aside></div>
 <script>
 const db=supabase.createClient('https://abnmvfftqwygoelcnkqj.supabase.co','sb_publishable_qpsVqO6AlUNYElzwEEXU5Q_HaSoZUc3');
 const cart={};let catalog={};
@@ -191,34 +260,60 @@ function renderCart(){
 }
 function openCart(){document.getElementById('cartShade').classList.add('open')}
 function closeCart(){document.getElementById('cartShade').classList.remove('open')}
-async function sendOrder(){
+function sendOrder(){
  const items=Object.values(cart);
  if(!items.length){
   alert('Agregá al menos una gorra al carrito.');
   return;
  }
-
+ closeCart();
+ document.getElementById('checkoutShade').classList.add('open');
+}
+function closeCheckout(){
+ document.getElementById('checkoutShade').classList.remove('open');
+}
+async function submitCheckout(event){
+ event.preventDefault();
+ const form=document.getElementById('checkoutForm');
+ const fd=new FormData(form);
+ const cliente={
+  nombre:String(fd.get('nombre')).trim(),
+  telefono:String(fd.get('telefono')).trim(),
+  email:String(fd.get('email')).trim(),
+  direccion:String(fd.get('direccion')).trim(),
+  codigo_postal:String(fd.get('codigo_postal')).trim()
+ };
+ const items=Object.values(cart);
+ if(!items.length){
+  alert('Tu carrito está vacío.');
+  closeCheckout();
+  return;
+ }
  const checkoutItems=items.map(x=>({
+  producto_id:x.id,
   title:x.name,
   quantity:x.qty,
   unit_price:x.price,
   currency_id:'ARS'
  }));
-
- const {data,error}=await db.functions.invoke('crear-preferencia',{
-  body:{items:checkoutItems}
- });
-
- if(error){
-  alert('No se pudo iniciar el pago. Intenta nuevamente.');
+ const boton=form.querySelector('button[type="submit"]');
+ boton.disabled=true;
+ boton.textContent='CONECTANDO CON MERCADO PAGO...';
+ try{
+  const {data,error}=await db.functions.invoke('crear-preferencia',{
+   body:{cliente,items:checkoutItems}
+  });
+  if(error) throw error;
+  if(data?.init_point){
+   window.location.href=data.init_point;
+  }else{
+   throw new Error('No se recibió el enlace de pago.');
+  }
+ }catch(error){
   console.error(error);
-  return;
- }
-
- if(data?.init_point){
-  window.location.href=data.init_point;
- }else{
-  alert('No se recibió el enlace de pago.');
+  alert('No se pudo iniciar el pago. Intenta nuevamente.');
+  boton.disabled=false;
+  boton.textContent='CONTINUAR A MERCADO PAGO';
  }
 }
  load();
